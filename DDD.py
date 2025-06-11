@@ -22,6 +22,7 @@ import pandas as pd
 from datetime import datetime
 import pickle
 import warnings
+import glob
 
 warnings.filterwarnings('ignore')
 
@@ -48,10 +49,25 @@ class DrowsinessDataProcessor:
                 print(f"Warning: Path {class_path} not found")
                 continue
 
-            for img_path in class_path.glob('*.png'):
+            # Obsługa różnych formatów obrazów - bez duplikatów
+            image_extensions = ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.tiff', '*.PNG', '*.JPG', '*.JPEG', '*.BMP', '*.TIFF']
+            image_files = set()  # Używamy set aby uniknąć duplikatów
+            
+            for ext in image_extensions:
+                for file_path in class_path.glob(ext):
+                    image_files.add(file_path)
+            
+            image_files = list(image_files)  # Konwertujemy z powrotem na listę
+            print(f"Found {len(image_files)} images in {class_name} folder")
+
+            for img_path in image_files:
                 try:
                     # Load and preprocess image
                     img = cv2.imread(str(img_path))
+                    if img is None:
+                        print(f"Could not read image: {img_path}")
+                        continue
+                        
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     img = cv2.resize(img, self.img_size)
                     img = img.astype(np.float32) / 255.0  # Normalize
@@ -70,7 +86,20 @@ class DrowsinessDataProcessor:
         print(f"Dataset loaded: {class_counts}")
         print(f"Total images: {len(X)}")
 
-        return np.array(X), np.array(y)
+        if len(X) == 0:
+            print("No images loaded! Check dataset structure:")
+            print("Expected structure:")
+            print("dataset/")
+            print("├── Drowsy/")
+            print("│   ├── A0001.png")
+            print("│   ├── A0002.png")
+            print("│   └── ...")
+            print("└── Non-Drowsy/")
+            print("    ├── A0001.png")
+            print("    ├── A0002.png")
+            print("    └── ...")
+
+        return np.array(X), np.array(y, dtype=np.float32)  # Ensure labels are float32
 
     def augment_data(self, X, y):
         """Apply data augmentation to balance and increase dataset"""
@@ -136,7 +165,7 @@ class DrowsinessModelCNN:
             layers.Dense(1, activation='sigmoid')  # Binary classification
         ])
 
-        # Compile model - POPRAWIONA KONFIGURACJA
+        # Fixed compilation - removed F1Score which is causing the error
         model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=0.001),
             loss='binary_crossentropy',
@@ -144,6 +173,7 @@ class DrowsinessModelCNN:
                 'accuracy',
                 keras.metrics.Precision(name='precision'),
                 keras.metrics.Recall(name='recall')
+                # Removed F1Score as it causes dtype issues - will calculate manually
             ]
         )
 
@@ -153,28 +183,36 @@ class DrowsinessModelCNN:
 
         return model
 
-
     def train_model(self, X_train, y_train, X_val, y_val, epochs=50, batch_size=32):
         """Train the CNN model with callbacks"""
         print("Starting model training...")
+        
+        # Ensure data types are correct
+        X_train = X_train.astype(np.float32)
+        X_val = X_val.astype(np.float32)
+        y_train = y_train.astype(np.float32)
+        y_val = y_val.astype(np.float32)
 
         # Callbacks
         callbacks = [
             keras.callbacks.EarlyStopping(
                 monitor='val_accuracy',
                 patience=10,
-                restore_best_weights=True
+                restore_best_weights=True,
+                verbose=1
             ),
             keras.callbacks.ReduceLROnPlateau(
                 monitor='val_loss',
                 factor=0.5,
                 patience=5,
-                min_lr=1e-7
+                min_lr=1e-7,
+                verbose=1
             ),
             keras.callbacks.ModelCheckpoint(
                 'best_drowsiness_model.h5',
                 monitor='val_accuracy',
-                save_best_only=True
+                save_best_only=True,
+                verbose=1
             )
         ]
 
@@ -194,18 +232,35 @@ class DrowsinessModelCNN:
     def evaluate_model(self, X_test, y_test):
         """Evaluate model performance"""
         print("Evaluating model...")
+        
+        # Ensure correct data types
+        X_test = X_test.astype(np.float32)
+        y_test = y_test.astype(np.float32)
 
         # Predictions
-        y_pred_proba = self.model.predict(X_test)
+        y_pred_proba = self.model.predict(X_test, verbose=1)
         y_pred = (y_pred_proba > 0.5).astype(int).flatten()
+
+        # Test accuracy
+        test_loss, test_acc, test_precision, test_recall = self.model.evaluate(X_test, y_test, verbose=0)
+        
+        # Calculate F1-score manually
+        from sklearn.metrics import f1_score
+        test_f1 = f1_score(y_test.astype(int), y_pred)
+        
+        print(f"\nTest Results:")
+        print(f"Accuracy: {test_acc:.4f}")
+        print(f"Precision: {test_precision:.4f}")
+        print(f"Recall: {test_recall:.4f}")
+        print(f"F1-Score: {test_f1:.4f}")
 
         # Classification report
         print("\nClassification Report:")
-        print(classification_report(y_test, y_pred,
+        print(classification_report(y_test.astype(int), y_pred,
                                     target_names=['Non-Drowsy', 'Drowsy']))
 
         # Confusion Matrix
-        cm = confusion_matrix(y_test, y_pred)
+        cm = confusion_matrix(y_test.astype(int), y_pred)
         plt.figure(figsize=(8, 6))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                     xticklabels=['Non-Drowsy', 'Drowsy'],
@@ -285,8 +340,11 @@ class MediaPipeAnalyzer:
         # Load trained model if provided
         self.cnn_model = None
         if model_path and os.path.exists(model_path):
-            self.cnn_model = keras.models.load_model(model_path)
-            print(f"CNN model loaded from {model_path}")
+            try:
+                self.cnn_model = keras.models.load_model(model_path)
+                print(f"CNN model loaded from {model_path}")
+            except Exception as e:
+                print(f"Error loading model: {e}")
 
         # Eye landmarks (MediaPipe 468 landmarks)
         self.LEFT_EYE = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
@@ -313,16 +371,20 @@ class MediaPipeAnalyzer:
 
             eye_landmarks = np.array(eye_landmarks)
 
-            # Calculate EAR
-            # Vertical eye landmarks
-            A = np.linalg.norm(eye_landmarks[1] - eye_landmarks[5])
-            B = np.linalg.norm(eye_landmarks[2] - eye_landmarks[4])
-            # Horizontal eye landmark
-            C = np.linalg.norm(eye_landmarks[0] - eye_landmarks[3])
+            # Calculate EAR - poprawiona formuła
+            if len(eye_landmarks) >= 6:
+                # Vertical eye landmarks
+                A = np.linalg.norm(eye_landmarks[1] - eye_landmarks[5])
+                B = np.linalg.norm(eye_landmarks[2] - eye_landmarks[4])
+                # Horizontal eye landmark
+                C = np.linalg.norm(eye_landmarks[0] - eye_landmarks[3])
 
-            ear = (A + B) / (2.0 * C)
-            return ear
-        except:
+                if C > 0:
+                    ear = (A + B) / (2.0 * C)
+                    return ear
+            
+            return 0.25  # Default value
+        except Exception as e:
             return 0.25  # Default value
 
     def calculate_mouth_ratio(self, landmarks):
@@ -336,14 +398,18 @@ class MediaPipeAnalyzer:
 
             mouth_landmarks = np.array(mouth_landmarks)
 
-            # Vertical mouth distance
-            vertical_dist = np.linalg.norm(mouth_landmarks[3] - mouth_landmarks[9])
-            # Horizontal mouth distance
-            horizontal_dist = np.linalg.norm(mouth_landmarks[0] - mouth_landmarks[6])
+            if len(mouth_landmarks) >= 10:
+                # Vertical mouth distance
+                vertical_dist = np.linalg.norm(mouth_landmarks[3] - mouth_landmarks[9])
+                # Horizontal mouth distance
+                horizontal_dist = np.linalg.norm(mouth_landmarks[0] - mouth_landmarks[6])
 
-            mouth_ratio = vertical_dist / horizontal_dist
-            return mouth_ratio
-        except:
+                if horizontal_dist > 0:
+                    mouth_ratio = vertical_dist / horizontal_dist
+                    return mouth_ratio
+            
+            return 0.0
+        except Exception as e:
             return 0.0
 
     def analyze_frame(self, frame):
@@ -402,15 +468,16 @@ class MediaPipeAnalyzer:
                         x_min, x_max = max(0, min(x_coords) - 20), min(w, max(x_coords) + 20)
                         y_min, y_max = max(0, min(y_coords) - 20), min(h, max(y_coords) + 20)
 
-                        face_roi = frame[y_min:y_max, x_min:x_max]
-                        face_roi = cv2.resize(face_roi, (227, 227))
-                        face_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB)
-                        face_roi = face_roi.astype(np.float32) / 255.0
-                        face_roi = np.expand_dims(face_roi, axis=0)
+                        if x_max > x_min and y_max > y_min:
+                            face_roi = frame[y_min:y_max, x_min:x_max]
+                            face_roi = cv2.resize(face_roi, (227, 227))
+                            face_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB)
+                            face_roi = face_roi.astype(np.float32) / 255.0
+                            face_roi = np.expand_dims(face_roi, axis=0)
 
-                        cnn_pred = self.cnn_model.predict(face_roi, verbose=0)[0][0]
-                        drowsiness_indicators['cnn_drowsy_prob'] = float(cnn_pred)
-                    except:
+                            cnn_pred = self.cnn_model.predict(face_roi, verbose=0)[0][0]
+                            drowsiness_indicators['cnn_drowsy_prob'] = float(cnn_pred)
+                    except Exception as e:
                         pass
 
                 # Draw landmarks
@@ -421,6 +488,38 @@ class MediaPipeAnalyzer:
                 )
 
         return frame, drowsiness_indicators
+
+
+def validate_dataset_structure(dataset_path):
+    """Validate the dataset structure"""
+    dataset_path = Path(dataset_path)
+    
+    if not dataset_path.exists():
+        print(f"Dataset path {dataset_path} does not exist!")
+        return False
+    
+    required_folders = ['Drowsy', 'Non-Drowsy']
+    for folder in required_folders:
+        folder_path = dataset_path / folder
+        if not folder_path.exists():
+            print(f"Required folder {folder_path} does not exist!")
+            return False
+        
+        # Check if folder contains images - bez duplikatów
+        image_extensions = ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.tiff', '*.PNG', '*.JPG', '*.JPEG', '*.BMP', '*.TIFF']
+        image_files = set()
+        
+        for ext in image_extensions:
+            for file_path in folder_path.glob(ext):
+                image_files.add(file_path)
+        
+        image_count = len(image_files)
+        print(f"Found {image_count} images in {folder}")
+        
+        if image_count == 0:
+            print(f"Warning: No images found in {folder}")
+    
+    return True
 
 
 def main():
@@ -434,18 +533,22 @@ def main():
 
     while True:
         print("\nSelect an option:")
-        print("1. Train new CNN model")
-        print("2. Test real-time detection")
-        print("3. Evaluate existing model")
-        print("4. Exit")
+        print("1. Validate dataset structure")
+        print("2. Train new CNN model")
+        print("3. Test real-time detection")
+        print("4. Evaluate existing model")
+        print("5. Exit")
 
-        choice = input("Enter your choice (1-4): ").strip()
+        choice = input("Enter your choice (1-5): ").strip()
 
         if choice == "1":
+            # Validate dataset structure
+            validate_dataset_structure(DATASET_PATH)
+
+        elif choice == "2":
             # Train new model
-            if not os.path.exists(DATASET_PATH):
-                print(f"Dataset path {DATASET_PATH} not found!")
-                print("Please update DATASET_PATH variable with correct path to DDD dataset")
+            if not validate_dataset_structure(DATASET_PATH):
+                print("Dataset validation failed! Please check your dataset structure.")
                 continue
 
             # Load and process data
@@ -455,6 +558,10 @@ def main():
             if len(X) == 0:
                 print("No data loaded. Check dataset path and structure.")
                 continue
+
+            # Check class distribution
+            unique, counts = np.unique(y, return_counts=True)
+            print(f"Class distribution: {dict(zip(['Non-Drowsy', 'Drowsy'], counts))}")
 
             # Split data
             X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
@@ -482,7 +589,7 @@ def main():
             with open('test_data.pkl', 'wb') as f:
                 pickle.dump((X_test, y_test), f)
 
-        elif choice == "2":
+        elif choice == "3":
             # Real-time detection
             analyzer = MediaPipeAnalyzer(MODEL_SAVE_PATH if os.path.exists(MODEL_SAVE_PATH) else None)
 
@@ -493,10 +600,14 @@ def main():
 
             print("Starting real-time detection. Press 'q' to quit.")
 
+            frame_count = 0
             while True:
                 ret, frame = cap.read()
                 if not ret:
+                    print("Failed to read frame from camera")
                     break
+
+                frame_count += 1
 
                 # Analyze frame
                 analyzed_frame, indicators = analyzer.analyze_frame(frame)
@@ -513,7 +624,7 @@ def main():
                     status_text = "YAWNING"
 
                 # Draw status
-                cv2.rectangle(analyzed_frame, (10, 10), (300, 120), (0, 0, 0), -1)
+                cv2.rectangle(analyzed_frame, (10, 10), (350, 140), (0, 0, 0), -1)
                 cv2.putText(analyzed_frame, f"Status: {status_text}", (20, 35),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
                 cv2.putText(analyzed_frame, f"EAR: {indicators['avg_ear']:.3f}", (20, 60),
@@ -521,6 +632,8 @@ def main():
                 cv2.putText(analyzed_frame, f"CNN Prob: {indicators['cnn_drowsy_prob']:.3f}", (20, 80),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 cv2.putText(analyzed_frame, f"Mouth: {indicators['mouth_ratio']:.3f}", (20, 100),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(analyzed_frame, f"Face: {'Yes' if indicators['face_detected'] else 'No'}", (20, 120),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
                 cv2.imshow('Driver Drowsiness Detection', analyzed_frame)
@@ -531,7 +644,7 @@ def main():
             cap.release()
             cv2.destroyAllWindows()
 
-        elif choice == "3":
+        elif choice == "4":
             # Evaluate existing model
             if not os.path.exists(MODEL_SAVE_PATH):
                 print(f"Model file {MODEL_SAVE_PATH} not found!")
@@ -545,12 +658,17 @@ def main():
             with open('test_data.pkl', 'rb') as f:
                 X_test, y_test = pickle.load(f)
 
+            print(f"Loaded test data: {len(X_test)} samples")
+
             # Load and evaluate model
             model = DrowsinessModelCNN()
-            model.model = keras.models.load_model(MODEL_SAVE_PATH)
-            model.evaluate_model(X_test, y_test)
+            try:
+                model.model = keras.models.load_model(MODEL_SAVE_PATH)
+                model.evaluate_model(X_test, y_test)
+            except Exception as e:
+                print(f"Error loading model: {e}")
 
-        elif choice == "4":
+        elif choice == "5":
             print("Goodbye!")
             break
 
