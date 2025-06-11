@@ -48,7 +48,7 @@ class DrowsinessDataProcessor:
                 print(f"Warning: Path {class_path} not found")
                 continue
 
-            for img_path in class_path.glob('*.jpg'):
+            for img_path in class_path.glob('*.png'):
                 try:
                     # Load and preprocess image
                     img = cv2.imread(str(img_path))
@@ -136,11 +136,15 @@ class DrowsinessModelCNN:
             layers.Dense(1, activation='sigmoid')  # Binary classification
         ])
 
-        # Compile model
+        # Compile model - POPRAWIONA KONFIGURACJA
         model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=0.001),
             loss='binary_crossentropy',
-            metrics=['accuracy', 'precision', 'recall']
+            metrics=[
+                'accuracy',
+                keras.metrics.Precision(name='precision'),
+                keras.metrics.Recall(name='recall')
+            ]
         )
 
         self.model = model
@@ -148,6 +152,7 @@ class DrowsinessModelCNN:
         print(f"Total parameters: {model.count_params():,}")
 
         return model
+
 
     def train_model(self, X_train, y_train, X_val, y_val, epochs=50, batch_size=32):
         """Train the CNN model with callbacks"""
@@ -424,7 +429,7 @@ def main():
     print("=" * 50)
 
     # Configuration
-    DATASET_PATH = "path/to/your/dataset"  # Update this path
+    DATASET_PATH = "dataset"  # Update this path
     MODEL_SAVE_PATH = "drowsiness_model.h5"
 
     while True:
