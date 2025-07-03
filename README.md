@@ -108,8 +108,6 @@ python main.py
   [INFO] Model saved to models/drowsiness_cnn.h5
   [INFO] Confusion matrix saved to plots/confusion_matrix_cnn.png
   ```
-- Example GUI view:
-  ![GUI Example](plots/training_history_cnn.png)
 
 ## Code Organization
 - `main.py`: Entry point, main menu, model selection
