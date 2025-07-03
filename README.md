@@ -35,9 +35,9 @@ A modular Python system for detecting drowsiness and yawning using deep learning
 
 ## Requirements
 - Python 3.8+
-- Kamera internetowa (do trybu real-time)
-- Zalecane: GPU z obsługą CUDA (dla szybszego treningu modeli)
-- Wszystkie zależności w `requirements.txt` (TensorFlow, OpenCV, MediaPipe, scikit-learn, matplotlib, numpy, pillow, itp.)
+- Webcam (for real-time mode)
+- Recommended: GPU with CUDA support (for faster model training)
+- All dependencies listed in `requirements.txt` (TensorFlow, OpenCV, MediaPipe, scikit-learn, matplotlib, numpy, pillow, etc.)
 
 ## Setup
 1. **Install dependencies:**
@@ -46,9 +46,9 @@ A modular Python system for detecting drowsiness and yawning using deep learning
    ```
 2. **Prepare dataset:**
    - Place your images in the `dataset/` folder, organized into subfolders: `Closed`, `Open`, `no_yawn`, `yawn`.
-   - Each subfolder should contain only images danej klasy (np. `dataset/Closed/1.jpg`).
-   - Zalecany format: .jpg lub .png, rozmiar min. 48x48 px.
-   - Zalecana liczba zdjęć na klasę: min. 200 (im więcej, tym lepiej).
+   - Each subfolder should contain only images of the given class (e.g., `dataset/Closed/1.jpg`).
+   - Recommended format: .jpg or .png, minimum size: 48x48 px.
+   - Recommended number of images per class: at least 200 (the more, the better).
 
    Example:
    ```
@@ -129,6 +129,9 @@ python main.py
 - For best results, ensure your dataset is balanced across all four classes.
 - You can further tune model parameters in `models.py`.
 - All outputs (models, plots) are automatically organized in their respective folders.
+
+## License
+Educational, open-source project. You may use and modify the code for your own purposes.
 
 ---
 
