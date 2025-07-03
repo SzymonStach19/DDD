@@ -1,76 +1,88 @@
-# Drowsiness Detection System
+# Drowsiness & Yawn Detection System
 
-## Description
-A robust system for drowsiness detection based on face and eye images. Uses classic CNN or ResNet50V2 (Keras/TensorFlow) and MediaPipe Face Mesh to detect closed eyes and yawning in photos and in real-time from a camera. Supports both GUI and real-time camera detection, and allows the user to choose between model types at startup.
+A modular Python system for detecting drowsiness and yawning using deep learning (Keras/TensorFlow, OpenCV, MediaPipe). Supports both classic CNN and ResNet50V2 transfer learning pipelines, with GUI and real-time camera detection.
 
 ## Features
-- Single photo analysis (GUI or CLI)
-- Real-time drowsiness detection from camera
-- Train your own model on your own dataset
-- Supports four classes: closed eyes, open eyes, yawning, no yawning
-- Choice of model: classic CNN (grayscale, 150x150) or ResNet50V2 (color, 224x224)
-- Automatic preprocessing and model compatibility
-- Training history and confusion matrix plots
+- Classifies images into four classes: `Closed`, `Open`, `no_yawn`, `yawn`
+- Two model options: classic CNN and ResNet50V2 (transfer learning)
+- Modular codebase for maintainability and extensibility
+- GUI and real-time camera detection modes
+- Robust data loading, preprocessing, and augmentation
+- Output plots and models organized in dedicated folders
+
+## Folder Structure
+```
+├── analyzer.py            # Image analysis class
+├── app.py                 # Real-time detection class and main application
+├── gui.py                 # GUI for image-based detection
+├── main.py                # Program entry point
+├── models.py              # Model training (CNN & ResNet50V2)
+├── utils.py               # Dataset loading & helpers
+├── requirements.txt       # Python dependencies
+├── README.md              # This file
+├── dataset/               # Dataset (Closed, Open, no_yawn, yawn)
+├── models/                # Saved model files (.h5)
+│   ├── drowsiness_cnn.h5
+│   └── drowsiness_resnet50v2.h5
+├── plots/                 # Output plots (.png)
+│   ├── confusion_matrix_cnn.png
+│   ├── confusion_matrix_optimized.png
+│   ├── training_history_cnn.png
+│   └── training_metrics_optimized.png
+```
+
+## Setup
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **Prepare dataset:**
+   - Place your images in the `dataset/` folder, organized into subfolders: `Closed`, `Open`, `no_yawn`, `yawn`.
+
+## Usage
+### 1. Training a Model
+Run the main menu and select the model type to train:
+```bash
+python main.py
+```
+- Choose between classic CNN and ResNet50V2 pipelines.
+- Trained models are saved in `models/` as `.h5` files.
+- Training history and confusion matrix plots are saved in `plots/`.
+
+### 2. Detection Modes
+- **GUI Detection:**
+  - Use the GUI to analyze static images for drowsiness/yawn.
+- **Real-Time Detection:**
+  - Use your webcam for live drowsiness/yawn detection.
+- The system auto-detects which model is loaded and applies the correct preprocessing.
+
+### 3. Output Files
+- **Models:**
+  - `models/drowsiness_cnn.h5` (classic CNN)
+  - `models/drowsiness_resnet50v2.h5` (ResNet50V2)
+- **Plots:**
+  - `plots/training_history_cnn.png`, `plots/training_metrics_optimized.png` (training curves)
+  - `plots/confusion_matrix_cnn.png`, `plots/confusion_matrix_optimized.png` (confusion matrices)
+
+## Code Organization
+- All code is modularized:
+  - `main.py`: Entry point, main menu, model selection
+  - `models.py`: Model training, saving, and plotting
+  - `analyzer.py`: Detection classes (image & real-time)
+  - `gui.py`: GUI logic
+  - `utils.py`: Data loading and helper functions (optional)
+- All file paths for models and plots are relative to `models/` and `plots/` folders.
 
 ## Requirements
 - Python 3.8+
-- OpenCV
-- TensorFlow
-- Keras
-- scikit-learn
-- Pillow
-- MediaPipe
-- Tkinter (for GUI)
-- matplotlib
-
-It is recommended to install all dependencies from the `requirements.txt` file:
-
-```bash
-pip install -r requirements.txt
-```
-
-## Directory Structure
-```
-├── DDD.py                      # Main program file (all logic, menu, models, GUI, detection)
-├── drowsiness_cnn.h5           # Trained classic CNN model (if exists)
-├── drowsiness_resnet50v2.h5    # Trained ResNet50V2 model (if exists)
-├── training_history_cnn.png    # Training history plot for CNN
-├── training_metrics_optimized.png # Training history plot for ResNet50V2
-├── confusion_matrix_cnn.png    # Confusion matrix for CNN
-├── confusion_matrix_optimized.png # Confusion matrix for ResNet50V2
-├── requirements.txt            # List of dependencies
-├── dataset/                    # Data folder (subfolders: Closed, Open, yawn, no_yawn)
-```
-
-## Usage
-
-### 1. Model Training
-If you don't have a model, just run the program. The model will be trained automatically using data from the `dataset/` folder. You will be prompted to choose the model type (classic CNN or ResNet50V2).
-
-```bash
-python DDD.py
-```
-
-### 2. Photo Analysis (GUI)
-Select option 1 in the menu, then choose a photo for analysis. You can select detection mode (eyes, yawning, or both) in the GUI.
-
-### 3. Real-time Detection (Camera)
-Select option 2 in the menu, choose detection mode, and observe live results from your camera. You can switch detection mode during runtime using keys 1 (eyes), 2 (yawning), 3 (both).
-
-### 4. Photo Analysis (CLI)
-Select option 3 in the menu, provide the path to the photo and detection mode.
-
-## Detection Modes
-- Eyes only – only eyes
-- Yawning only – only yawning
-- Eyes and yawning – both at once
+- See `requirements.txt` for all dependencies (TensorFlow, OpenCV, MediaPipe, scikit-learn, matplotlib, etc.)
 
 ## Notes
-- The program will prompt you to train a new model or use an existing one if found.
-- All code and logic is in `DDD.py`.
-- The GUI and real-time detection work with both model types.
+- For best results, ensure your dataset is balanced across all four classes.
+- You can further tune model parameters in `models.py`.
+- All outputs (models, plots) are automatically organized in their respective folders.
 
-## Authors
-Jakub Dziewior
-Szymon Stach
+---
+
+**Project maintained by [Your Name].**
 
